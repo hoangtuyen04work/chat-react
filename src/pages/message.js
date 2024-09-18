@@ -2,119 +2,111 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AiOutlineSend } from "react-icons/ai";
 import { chatAPI, getAllUser, getAllMessages } from '../services/apiService';
 import SockJS from 'sockjs-client';
-import {
-    useDispatch,
-    useSelector
-} from 'react-redux';
-import { Client } from '@stomp/stompjs';
+import { Client } from '@stomp/stompjs';  // Updated import
+import { useDispatch, useSelector } from 'react-redux';
 import { doLogout } from '../redux/action/userAction';
-const SOCKET_URL = 'http://localhost:8086/ws';
+
 const Message = ({ onLogout }) => {
-    const [userid, setUserid] = useState(useSelector(state => state.user.user.userId));
+    const userid = useSelector(state => state.user.user.userId);
     const [listUser, setListUser] = useState([]);
     const [listMessages, setListMessages] = useState([]);
     const [chatId, setChatId] = useState();
     const [messagerid, setMessagerid] = useState('');
     const dispatch = useDispatch();
-    const [content, setContent] = useState();
-    const [isConnected, setIsConnected] = useState(false);
-    const socket = new SockJS(SOCKET_URL);
-    const stompClient = new Client(
-        {
-        webSocketFactory: () => new SockJS(SOCKET_URL),
-        reconnectDelay: 5000,
-        onConnect: () => {
-            console.log('Connected to WebSocket');
-            stompClient.subscribe('/topic/receive', (message) => {
-                setIsConnected(true);
-                console.log("Message received:", message.body);
-                setListMessages(prev => [...prev, JSON.parse(message.body)]); // Update UI with the message
-            });
-        },
-            onStompError: (error) => {
-            setIsConnected(false); // Mark as not connected
-            console.log("WebSocket Error:", error);
+    const [content, setContent] = useState('');
+    const [stompClient, setStompClient] = useState(null);
+    const messageContainerRef = useRef(null);
+        const textareaRef = useRef(null); // Thêm ref cho textarea
+
+    const scrollToBottom = () => {
+        const container = messageContainerRef.current;
+        if (container) {
+            container.scrollTop = container.scrollHeight;
         }
-    });
-    const handleOnChange = (event) => {
-        setContent(event.target.value);
-        console.log(content);
-    }
-    const onSendMessage = () => {
-        if (!stompClient.active) {
-            console.error("Cannot send message. Not connected to WebSocket.");
-            return;
-        }
-        console.log("Sending message...");
-        if (content.trim() !== "") {
+    };
+
+    const handleLogout = () => {
+        onLogout();
+        dispatch(doLogout());
+    };
+
+    const handleOnMessage = (event) => {
+        const userId = event.currentTarget.getAttribute('data-id');
+        setMessagerid(userId);
+        getAllMessage(userId);
+        setContent("");
+    };
+
+    const getAllMessager = async () => {
+        const data = await getAllUser(userid);
+        setListUser(data);
+    };
+
+    const getAllMessage = async (userid2) => {
+        const data = await getAllMessages(userid, userid2);
+        console.log("messages of a chat", data);
+        setChatId(data.id);
+        setListMessages(data.messageResponses);
+    };
+
+    const sendMessage = () => {
+        if (stompClient) {
             const messagePayload = {
                 chatId: chatId,
                 senderid: userid,
                 recipientid: messagerid,
                 content: content
             };
-
             stompClient.publish({
-                destination: "/app/send", // The destination to send the message to (from the backend)
-                body: JSON.stringify(messagePayload) // Convert message payload to JSON string
+                destination: '/app/send',
+                body: JSON.stringify(messagePayload)
             });
-            console.log("Message sent:", content);
-            setContent(""); // Clear input after sending
+            setContent('');
         }
     };
-    const onReceiveMessage = (msgText) => {
-        console.log('new Message receive', msgText);
-        setListMessages(prev => prev.concat(msgText));
-    }
-    const messageContainerRef = useRef(null);
-    const scrollToBottom = () => {
-        const container = messageContainerRef.current;
-        container.scrollTop = container.scrollHeight;
-    };
-    const handleLogout =() => {
-        onLogout();
-        dispatch(doLogout());
-    }
-    const handleOnMessage = (event) => {
-        setMessagerid(event.currentTarget.getAttribute('data-id'));
-        getAllMessage(event.currentTarget.getAttribute('data-id'));
-    }
-    const getAllMessager = async () => {
-        let data = await getAllUser(userid);
-        setListUser(data);
-    }
-    const getAllMessage = async (userid2) => {
-        let data = await getAllMessages(userid, userid2);
-        console.log(data);
-        setChatId(data.chatId);
-        setListMessages(data.messageResponses);
-    }
+    useEffect(() => {
+        const socket = new SockJS('http://localhost:8086/message/ws');
+        const client = new Client({
+            webSocketFactory: () => socket,
+            onConnect: (frame) => {
+                console.log('Connected: ' + frame);
+                client.subscribe(`/topic/receive/${chatId}`, (response) => {
+                    const receivedMessage = JSON.parse(response.body);
+                    console.log("message received", receivedMessage);
+                    setListMessages(prevMessages => [...prevMessages, receivedMessage]);
+                    scrollToBottom();
+                });
+            },
+            debug: (str) => {
+                console.log(str);
+            }
+        });
+        client.activate();
+        setStompClient(client);
+        return () => {
+            if (client) {
+                client.deactivate();
+            }
+        };
+    }, []);
+    useEffect(() => {
+        scrollToBottom(); // Cuộn xuống khi danh sách tin nhắn được render hoặc cập nhật
+    }, [listMessages]); // Lắng nghe sự thay đổi trong listMessages
+
     useEffect(() => {
         getAllMessager();
-        // const client = new Client({
-        //     webSocketFactory: () => new SockJS('http://localhost:8086/ws'),
-        //     reconnectDelay: 5000,
-        //     onConnect: () => {
-        //         console.log('Connected to WebSocket');
-        //         client.subscribe('/topic/receive', (message) => {
-        //             console.log("Message received:", message.body);
-        //             setListMessages(prev => [...prev, JSON.parse(message.body)]);
-        //         });
-        //     },
-        //     onStompError: (error) => {
-        //         console.error("WebSocket Error:", error);
-        //     }
-        // });
-        // client.activate();
-        // // Cleanup function to disconnect when component unmounts
-        // return () => {
-        //     if (client.connected) {
-        //         client.deactivate();
-        //     }
-        // };
     }, []);
+
+     const handleOnChange = (event) => {
+         setContent(event.target.value);
+         // Tự động điều chỉnh chiều cao của textarea
+         textareaRef.current.style.height = 'auto'; // Đặt về auto trước để tính toán lại chiều cao
+         textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`; // Giới hạn chiều cao tối đa (100px ~ khoảng 4 dòng)
+     };
+
+
     return (
-        <div className="body" >
+        <div className="body">
             <div className="message-form">
                 <header className="header-message">
                     <span className="header-title">Message</span>
@@ -125,60 +117,59 @@ const Message = ({ onLogout }) => {
                         <div className="list-message-header">List Message</div>
                         <div className="list-message-body">
                             {
-                            listUser.map((user, index) => (
-                                <div key={index} data-id={user} className="user-tag" onClick={handleOnMessage}>
-                                    { user }
-                                </div>
-                            ))
+                                listUser.map((user, index) => (
+                                    <div key={index} data-id={user} className="user-tag" onClick={handleOnMessage}>
+                                        {user}
+                                    </div>
+                                ))
                             }
                         </div>
                     </div>
                     <div className="divider"></div>
                     {
-                        messagerid ? 
-                            (
-                                <div className="message">
-                                    <div className="message-header">
-                                        Header
-                                    </div>
-                                    <div className="divider"></div>
-                                    <div className = "message-body" ref = {messageContainerRef}>
-                                        { listMessages && listMessages.length > 0?
-                                            (
-                                                listMessages
-                                                .reverse()
-                                                .map((message, index) => (
-                                                <div key={index} className={`message-tag ${message.sender === "1" ? "send" : "receive"}`}>
-                                                    {message.text}
+                        messagerid ? (
+                            <div className="message">
+                                <div className="message-header">
+                                    {messagerid}
+                                </div>
+                                <div className="divider"></div>
+                                <div className="message-body" ref={messageContainerRef}>
+                                    {
+                                        listMessages && listMessages.length > 0 ? (
+                                            listMessages.map((message, index) => (
+                                                <div key={index} className={`message-tag ${message.senderid === `${userid}` ? "send" : "receive"}`}>
+                                                    {message.content}
                                                 </div>
-                                                )
-                                                )
-                                            )
-                                            :
-                                            (
-                                                <div></div>
-                                            )
-                                        }
-                                        </div>
-                                    <div className="message-footer">
-                                        <input value={content} onChange={handleOnChange} className="input-message" placeholder="type message" />
-                                        <div className="send-btn" onClick={onSendMessage}>
-                                            <AiOutlineSend />
-                                        </div>
+                                            ))
+                                        ) : (
+                                            <div></div>
+                                        )
+                                    }
+                                </div>
+                                <div className="message-footer">
+                                    <textarea
+                                        ref={textareaRef} // Thêm ref cho textarea
+                                        value={content}
+                                        onChange={handleOnChange}
+                                        className="input-message"
+                                        placeholder="Type a message..."
+                                    ></textarea>
+                                    <div className="send-btn" onClick={sendMessage}>
+                                        <AiOutlineSend />
                                     </div>
                                 </div>
-                            )
-                            :
-                            (
-                                <div className="homepage-message">
-                                    Chọn một cuộc trò chuyện để bắt đầu
-                                </div>
-                            )
+
+                            </div>
+                        ) : (
+                            <div className="homepage-message">
+                                Chọn một cuộc trò chuyện để bắt đầu
+                            </div>
+                        )
                     }
                 </div>
             </div>
         </div>
-    )
-}
+    );
+};
 
 export default Message;

@@ -216,6 +216,7 @@ html{
           font-size: 2rem;
           font-weight: 600;
           margin-bottom: 1rem;
+          display: flex;
         }
         .list-message-body{
           overflow-y: auto;
@@ -325,6 +326,7 @@ html{
             display: flex;
             border-radius: 1rem;
             padding: 0.5rem 1rem;
+            text-align: left;
           }
           .send{
             align-self: self-end;
@@ -336,25 +338,36 @@ html{
             background-color: #b8b8b8;
           }
         }
-        .message-footer{
+        .message-footer {
           display: flex;
           justify-content: space-between;
           align-items: center;
           gap: 1rem;
-          .input-message{
+
+          .input-message {
             background-color: #d8d4d4;
             flex-grow: 1;
             padding: 0.5rem 1rem;
             border-radius: 2rem;
+            resize: none; /* Tắt khả năng thay đổi kích thước thủ công */
+            min-height: 40px; /* Chiều cao mặc định ban đầu, tương đương với 1 dòng */
+            max-height: 100px; /* Giới hạn chiều cao tối đa (khoảng 4 dòng) */
+            overflow-y: auto; /* Thanh cuộn sẽ xuất hiện khi vượt quá giới hạn */
+            line-height: 1.5; /* Cách dòng */
+            font-size: 1rem; /* Kích thước chữ */
+            border: none; /* Bỏ đường viền mặc định */
+            outline: none; /* Bỏ viền focus mặc định */
           }
-          .send-btn{
+
+          .send-btn {
             font-size: 2.8rem;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
           }
-          .send-btn:hover{
+
+          .send-btn:hover {
             color: #007bff;
           }
         }
